@@ -248,13 +248,13 @@ visits: average of visits
 price: average of price of goods(quantity)
 interval_1: days between today and last time of shopping -> (today-recency) to be days
 
-
-select seg_id, count(cust_no) as cust, sum(gross_sales)/count(visits) as spend, avg(visits) as visits,avg(avg_price) as price,avg((DATE'2020-04-23' - recency)day(4)) as interval_1 from chnccp_msi_z.ganyu_temp_control
+--参数比较
+select seg_id, count(distinct cust_no||home_store_id||auth_person_id) as cust, sum(gross_sales)/count(visits) as spend, avg(visits) as visits,avg(avg_price) as price,avg((DATE'2020-04-23' - recency)day(4)) as interval_1 from chnccp_msi_z.ganyu_temp_control
 group by 1 order by 1;
-select seg_id, count(cust_no) as cust, sum(gross_sales)/count(visits) as spend, avg(visits) as visits,avg(avg_price) as price,avg((DATE'2020-04-23' - recency)day(4)) as interval_1 from chnccp_msi_z.ganyu_temp_sending
+select seg_id, count(distinct cust_no||home_store_id||auth_person_id) as cust, sum(gross_sales)/count(visits) as spend, avg(visits) as visits,avg(avg_price) as price,avg((DATE'2020-04-23' - recency)day(4)) as interval_1 from chnccp_msi_z.ganyu_temp_sending
 group by 1 order by 1;
 
-
+--导出
 select home_store_id, cust_no, auth_person_id, mobile_phone_no from chnccp_msi_z.ganyu_temp_sending where seg_id = 'seg1';
 
 
