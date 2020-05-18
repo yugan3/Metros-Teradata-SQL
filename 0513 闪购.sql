@@ -47,14 +47,12 @@ cardholderkey
 unionid
 campaign_type*/
 
-
 ------------------------------------------------------------------0513report-------------------------------------------------------------------
 ------------------------------------------
 ---------------------1--------------------
 --mikg_art_no
 select art_name, art_name_tl, mikg_art_no from chnccp_dwh.dw_art_var_tu
 where mikg_art_no in (225289, 232399, 118457, 225558, 209535,231680,233084,233012);
---
 
 select count(distinct home_store_id||cust_no||auth_person_id) as buyer, count(distinct home_store_id||cust_no||auth_person_id) as orders, sum(qty) as qty, sum(qty* price) as sales from chnccp_crm.evolve_flash_sale 
 where qty <> 0 and order_status = 1;
@@ -62,6 +60,129 @@ where qty <> 0 and order_status = 1;
 select deliver_type, count(distinct home_store_id||cust_no||auth_person_id) as buyer, count(distinct home_store_id||cust_no||auth_person_id) as orders, sum(qty) as qty, sum(qty* price) as sales from chnccp_crm.evolve_flash_sale 
 where qty <> 0 and order_status = 1
 group by deliver_type;
+
+--cross basket
+drop table chnccp_msi_z.pickup_namelist;
+create table chnccp_msi_z.pickup_namelist
+	as(select home_store_id, cust_no, auth_person_id from chnccp_crm.evolve_flash_sale
+		where qty <> 0 and order_status = 1 and deliver_type = 2
+		group by home_store_id, cust_no, auth_person_id
+		)with data;
+
+select a.home_store_id, a.cust_no, a.auth_person_id, b.date_of_day, b.sell_qty_colli, b.sell_val_gsp, c.art_name, c.mikg_art_no from chnccp_msi_z.pickup_namelist a 
+join chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  b 
+on a.cust_no = b.cust_no and a.home_store_id = b.home_store_id and a.auth_person_id = b.auth_person_id
+join chnccp_dwh.dw_art_var_tu c 
+on c.art_no = b.art_no and c.var_tu_key = b.var_tu_key
+where b.date_of_day between '2020-05-16' and '2020-05-17'
+and c.mikg_art_no not in (225289,232399,118457,225558,209535,209535);
+
+--qty for picking and delivery
+--610
+select b.mikg_art_no,b.art_name,b.art_name_tl
+,sum(a.sell_qty_colli) qty
+,sum(sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(sell_val_nsp) as net_sales
+from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  a
+inner join chnccp_dwh.dw_art_var_tu b
+	on a.art_no = b.art_no and a.var_tu_key = b.var_tu_Key
+where a.date_of_day between '2020-05-12' and  '2020-05-19'  --对应发货的时间
+and b.mikg_art_no = 233012 --大仓610发货的商品
+and a.store_id = 610
+and a.deli_ind = 'Y'
+group by 1,2,3
+order by 1;
+
+--10
+select c.mikg_art_no,c.art_name,c.art_name_tl
+,sum(a.sell_qty_colli) qty
+,sum(a.sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(a.sell_val_nsp) as net_sales
+ from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  a
+ inner join (
+	-- order 
+	select a.invoice_id,a.home_store_id,a.cust_no,a.auth_person_id
+	,sum(sell_val_gsp) as gross_sales
+	,sum(sell_val_nsp) as net_sales
+	from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  a
+	where a.date_of_day between '2020-05-12' and  '2020-05-19'  --对应发货的时间
+	and a.art_no = 213223 --负商品编号
+	and a.store_id = 10
+	and a.deli_ind = 'Y'
+	group by 1,2,3,4
+) b
+on a.invoice_id = b.invoice_id 
+inner join chnccp_dwh.dw_art_var_tu c
+	on a.art_no =c.art_no and a.var_tu_key = c.var_tu_Key
+where  c.mikg_art_no in (231680, 233084) --门店发货的商品编号
+group by 1,2,3
+order by 1
+
+--pick-up
+--else then KIWI
+SELECT b.mikg_art_no, b.art_name, b.art_name_tl
+,sum(a.sell_qty_colli) as qty
+,sum(a.sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(a.sell_val_nsp) as net_sales
+FROM chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no IN (225289, 232399, 118457, 209535) --自提的商品编号
+	AND
+a.cupr_action_id * 1000 + a.cupr_action_sequence_id IN (205035366, 205035367, 205035368, 205035490, 205035491)
+GROUP BY 1,2,3
+order by 1;
+
+--for KIWI
+SELECT b.mikg_art_no, b.art_name, b.art_name_tl
+,sum(a.sell_qty_colli) as qty
+,sum(a.sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(a.sell_val_nsp) as net_sales
+FROM chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no = 225558 --自提的商品编号
+	AND a.cupr_action_id * 1000 + a.cupr_action_sequence_id = 205035486
+	and a.store_id in (10,12,17,44,50,139,173,198,229,11,40,41,54,60,62,66,76,105,67,179,14,38,55,68,72,164,130,141,127,163,13,42,74,125,70,142)
+GROUP BY 1,2,3
+order by 1;
+
+
+--fullfilment pick-up customer: 12157
+select count(distinct t1.auth_person_id||t1.home_store_id||t1.auth_person_id) from
+((select a.cust_no, a.home_store_id, a.auth_person_id from chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no = 225558 --自提的商品编号
+	AND a.cupr_action_id * 1000 + a.cupr_action_sequence_id = 205035486
+	and a.store_id in (10,12,17,44,50,139,173,198,229,11,40,41,54,60,62,66,76,105,67,179,14,38,55,68,72,164,130,141,127,163,13,42,74,125,70,142)
+ ) Union 
+(select a.cust_no, a.home_store_id, a.auth_person_id 
+	FROM chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no IN (225289, 232399, 118457, 209535) --自提的商品编号
+	AND
+a.cupr_action_id * 1000 + a.cupr_action_sequence_id IN (205035366, 205035367, 205035368, 205035490, 205035491)
+)) t1;
+
+
 
 -------------------------------------------
 --------------------2----------------------
@@ -228,4 +349,43 @@ group by 1;
 select liveshow, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_crm.evolve_flash_sale
 group by 1;
 
+--------------------------------------
+------------channel check-------------
+create table userinfo_0513 
+	as(select storekey as home_store_id, custkey as cust_no, cardholderkey as auth_person_id, channel,
+		CASE WHEN channel in ('20051301A01WPY000', '20051312A01WPY000') THEN 'Posting'
+		     WHEN channel in ('20051303A01MPY000', '20051304A01MPY000') THEN 'Pop-up'
+		     WHEN channel in ('20051314A01LSY000', '20051315A01LSY000') THEN 'Liveshow'
+		     WHEN channel = '20042901A05MCY000' THEN 'Share'
+		     ELSE 'Other' END AS tag
+		     from first_channel_userinfo where campaign_type = '5.13');
 
+select tag, count(distinct home_store_id|cust_no|auth_person_id) from userinfo_0513
+group by tag;
+
+
+
+
+------------------------------------------
+----------address temp table--------------
+drop table chnccp_msi_z.flashsales_address_order;
+create table chnccp_msi_z.flashsales_address_order
+	(home_store_id INTEGER,
+	cust_no INTEGER,
+	auth_person_id INTEGER
+	province VARCHAR(36),
+	city VARCHAR(36), 
+	district VARCHAR(36),
+	detailed_address VARCHAR(36));
+
+--------temp table into final table-------
+update chnccp_msi_z.address set detailed_address = '' where home_store_id =  and cust_no =  and auth_person_id = ;
+insert into chnccp_msi_z.address select '0513' as flashsales, home_store_id, cust_no, auth_person_id, province, city, district, detailed_address from chnccp_msi_z.flashsales_address_order;
+
+select art_name, count(store_no||cust_no||auth_person_id) as orders, sum(qty) as quantity from chnccp_msi_z.ganyu_temp
+where order_status = 1 and qty <> 0
+group by art_name;
+
+------------------------------------------
+select gcn_np, count(auth_person_id||home_store_id||cust_no) as people from chnccp_dwh.dw_gcn_campaign_event
+where gcn_no in(6947890911839,6947890911846,6947890911853,6947890912034,6947890912096,6947890912102) and gcn_disposition = 'redeemed';
