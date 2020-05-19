@@ -36,7 +36,7 @@ create table chnccp_msi_z.ganyu_temp_lifecycle_new
 		join chnccp_dwh.dw_cust_invoice b 
 		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
 		group by a.delivery, a.store_no, a.cust_no, a.auth_person_id
-		having min(a.date_of_day)>='2020-04-28'	)with data;
+		having min(b.date_of_day)>='2020-04-28'	)with data;
 
 select delivery, lifecycle, count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_new
 group by delivery,lifecycle;
@@ -89,6 +89,47 @@ create table chnccp_msi_z.ganyu_temp_ageandgender
 		left join chnccp_dwh.dw_cust_auth_person b 
 		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id)with data;
 
+--------------------------------------------------------
+-----------null identification_id check-----------------
+----------------------supplyment------------------------
+drop table chnccp_msi_z.ganyu_temp_ageandgender_null;
+create table chnccp_msi_z.ganyu_temp_ageandgender_null
+	as(
+select a.home_store_id, a.auth_person_id, a.cust_no, a.identification_id, e.cust_assort_section_id, d2.branch_id,
+case    
+    when e.cust_assort_section_id = 1 then '1) HoReCa'
+    when e.cust_assort_section_id = 3 then '1) Trader'
+    when e.cust_assort_section_id in (5,7) and d2.branch_id in (982) then '3) SCO - daypass'
+    when e.cust_assort_section_id in (5,7) and d2.branch_id in (401,492,488,971,972) then '3) SCO - FoM'
+    when e.cust_assort_section_id in (5,7) and d2.branch_id not in (401,492,493,488,971,972,973,982) then '3) SCO - w/o FoM'
+    else '4) Undefined'
+end as hts_info
+ from (select * from chnccp_msi_z.ganyu_temp_ageandgender where (age is NULL or gender is null) ) b 
+left join chnccp_dwh.dw_cust_auth_person a 
+on a.home_store_id = b.store_no and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+left join chnccp_dwh.dw_customer d2
+on a.cust_no = d2.cust_no and a.home_store_id = d2.home_store_id
+left join chnccp_dwh.dw_cust_branch e 
+on e.branch_id = d2.branch_id) with data;
+
+
+drop table chnccp_msi_z.ganyu_temp_ageandgender_null_1;
+create table chnccp_msi_z.ganyu_temp_ageandgender_null_1 as (
+	select a.home_store_id, a.auth_person_id, a.cust_no, a.identification_id, a.branch_id, b.date_created, EXTRACT(year FROM b.date_created) as year1 from chnccp_msi_z.ganyu_temp_ageandgender_null a
+	left join chnccp_dwh.dw_cust_auth_person b 
+	on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id) with data;
+
+select year1, count(year1) from chnccp_msi_z.ganyu_temp_ageandgender_null_1
+group by year1
+order by year1;
+
+select hts_info, branch_id, count(*) from chnccp_msi_z.ganyu_temp_ageandgender_null
+group by hts_info, branch_id
+order by hts_info, branch_id;
+
+------------------------------------------------------
+
+------------------------------------------------------
 --------------------------age-------------------------
 drop table chnccp_msi_z.ganyu_temp_age;
 create table chnccp_msi_z.ganyu_temp_age
@@ -155,3 +196,93 @@ select b.fan_ind,count(distinct a.auth_person_id||a.store_no||a.cust_no) as buye
 left join chnccp_msi_z.mem_ref_umc_tag_act b
 on a.auth_person_id = b.auth_person_id and a.store_no = b.home_store_id and a.cust_no = b.cust_no
 group by 1;
+
+-----------------------------------------------------------
+------------------------liveshow---------------------------
+--直播的名单
+chnccp_msi_z.liveshow_newuser 
+storekey
+custkey
+cardholderkey
+--订单明细
+chnccp_msi_z.ganyu_temp
+dt
+campaign_type
+channel
+store_no
+cust_no
+auth_person_id
+order_type
+art_name
+qty
+price
+channel_name
+channel_category
+order_status
+liveshow
+
+drop table chnccp_msi_z.liveshow_newuser_watched; --5390
+create table chnccp_msi_z.liveshow_newuser_watched
+	as(select a.storekey as home_store_id, a.custkey as cust_no, a.cardholderkey as auth_person_id from (select distinct storekey, custkey, cardholderkey from chnccp_msi_z.liveshow_newuser where storekey <> 0) a 
+		join (select distinct store_no, cust_no, auth_person_id from chnccp_msi_z.ganyu_temp) b 
+		on a.storekey = b.store_no and a.custkey = b.cust_no and a.cardholderkey = b.auth_person_id
+		)with data;
+
+drop table chnccp_msi_z.liveshow_newuser_watched_not; --138944
+create table chnccp_msi_z.liveshow_newuser_watched_not 
+	as(select distinct b.store_no, b.cust_no, b.auth_person_id from (select distinct store_no, cust_no, auth_person_id from chnccp_msi_z.ganyu_temp) b
+		left join chnccp_msi_z.liveshow_newuser_watched a
+		on a.home_store_id = b.store_no and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		where a.cust_no is NULL) with data;
+
+
+drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan;
+create table chnccp_msi_z.liveshow_newuser_watched_UMCfan
+	as(select a.*, 
+		CASE WHEN b.member_type IS NOT NULL THEN b.member_type
+		     ELSE 'other' END AS member_type, 
+		CASE WHEN b.fan_ind IS NOT NULL THEN b.fan_ind
+		     ELSE 'N' END AS fan_ind from chnccp_msi_z.liveshow_newuser_watched a 
+		left join chnccp_msi_z.mem_ref_umc_tag_act b
+		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		)with data;
+
+select fan_ind, member_type, count(*) as people from chnccp_msi_z.liveshow_newuser_watched_UMCfan
+group by fan_ind, member_type;
+
+drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket;
+create table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
+	as( select a.member_type, a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
+        join chnccp_msi_z.liveshow_newuser_watched_UMCfan a 
+        on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+        where b.date_of_day between '2019-04-29' and '2020-04-28'
+        group by a.member_type, a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id)with data;
+
+select member_type, fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
+group by member_type, fan_ind;
+
+--basket for 2 groups of liveshow and non for comparison
+drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan;
+create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
+	as(select a.*, 
+		CASE WHEN b.member_type IS NOT NULL THEN b.member_type
+		     ELSE 'other' END AS member_type, 
+		CASE WHEN b.fan_ind IS NOT NULL THEN b.fan_ind
+		     ELSE 'N' END AS fan_ind from chnccp_msi_z.liveshow_newuser_watched_not a 
+		left join chnccp_msi_z.mem_ref_umc_tag_act b
+		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		)with data;
+
+select fan_ind, member_type, count(*) as people from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
+group by fan_ind, member_type;
+
+drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket;
+create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
+	as( select a.member_type, a.fan_ind, a.store_no, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
+        join chnccp_msi_z.liveshow_newuser_watched_not_UMCfan a 
+        on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+        where b.date_of_day between '2019-04-29' and '2020-04-28'
+        group by a.member_type, a.fan_ind, a.store_no, a.cust_no, a.auth_person_id)with data;
+
+select member_type, fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
+group by member_type, fan_ind;
