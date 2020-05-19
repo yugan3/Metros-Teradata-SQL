@@ -1,139 +1,229 @@
-------------------------------------------------------------------闪购报告---------------------------------------------------
--------------------------------------------------
-----------------------report---------------------
-----------------------sales---------------------
-chnccp_msi_z.ganyu_temp
+--data check from postgreSQL
+drop table falshsales0513;
+create table falshsales0513
+	as(select created_at, store_key, cust_key, ch_key, count as counts, price, goods_name, order_status, campaign from metro_order.release_order_orders 
+		where campaign = '会员闪购' and created_at between '2020-05-11' and '2020-05-15');
 
-select count(distinct store_no||auth_person_id||cust_no) as people from chnccp_msi_z.ganyu_temp where art_name in ('越南越飞来香脆鱼皮','安热沙小金瓶清爽防晒乳','蔚优Valio无乳糖全脂奶粉','花王妙而舒婴儿纸尿裤箱装','惠氏铂臻幼儿配方奶粉3段');
-select count(distinct store_no||auth_person_id||cust_no) as people from chnccp_msi_z.ganyu_temp where art_name in ('贝克曼博士刷式衣领袖去渍剂250ml*2','金歌斯达特级初榨橄榄油250ML','皮龙酒庄多福红葡萄酒750ml');
+--teradata temp table 
+drop table chnccp_msi_z.falshsales0513;
+create table chnccp_msi_z.falshsales0513
+	(created_at date, 
+	store_key INTEGER, 
+	cust_key INTEGER, 
+	ch_key INTEGER, 
+	counts INTEGER,
+	price float(48),
+	goods_name VARCHAR(48),
+	order_status INTEGER,
+	campaign VARCHAR(48)
+		);
 
-select art_name, sum(qty*count) as sales, sum(count) as orders,  count(distinct store_no||auth_person_id||cust_no) as buyer from chnccp_msi_z.ganyu_temp 
-where art_name in ('贝克曼博士刷式衣领袖去渍剂250ml*2','金歌斯达特级初榨橄榄油250ML','皮龙酒庄多福红葡萄酒750ml')
-group by 1;
-select art_name, sum(qty*price) as sales, sum(qty) as orders,  count(distinct store_no||auth_person_id||cust_no) as buyer from chnccp_msi_z.ganyu_temp 
-where art_name in ('越南越飞来香脆鱼皮','安热沙小金瓶清爽防晒乳','蔚优Valio无乳糖全脂奶粉','花王妙而舒婴儿纸尿裤箱装','惠氏铂臻幼儿配方奶粉3段')
-group by 1;
+-----------------------------------------------------------------------0513闪购----------------------------------------------------------------
+--闪购3张表
+--first_channel_userinfo
+--metro_order.release_order_orders
+--liveshow_userinfo_all
+---------------------------首次进入渠道-------------------------
+/*drop table first_channel_userinfo_0513;
+create table first_channel_userinfo_0513
+	as(select * from first_channel_userinfo where campaign_type = '5.13');
+字段：
+fromat
+channel
+storekey
+custkey
+cardholderkey
+unionid
+campaign_type*/
 
+---------------------------直播用户名单-------------------------
+/*drop table liveshow_userinfo_all_0513;
+create table liveshow_userinfo_all_0513
+	as(select * from liveshow_userinfo_all where campaign_type = '5.13');
+字段：
+storekey
+custkey
+cardholderkey
+unionid
+campaign_type*/
 
-drop table chnccp_msi_z.ganyu_temp_namelist;
-create table chnccp_msi_z.ganyu_temp_namelist
-	as (select distinct store_no, auth_person_id, cust_no,
-		CASE WHEN art_name in ('贝克曼博士刷式衣领袖去渍剂250ml*2','金歌斯达特级初榨橄榄油250ML','皮龙酒庄多福红葡萄酒750ml') THEN 'pick_up'
-		     WHEN art_name in ('越南越飞来香脆鱼皮','安热沙小金瓶清爽防晒乳','蔚优Valio无乳糖全脂奶粉','花王妙而舒婴儿纸尿裤箱装','惠氏铂臻幼儿配方奶粉3段') THEN 'home_delivery' END AS delivery 
-		from chnccp_msi_z.ganyu_temp where order_status = 1 and qty <>0 and art_name is not NULL ) with data;
+------------------------------------------------------------------0513report-------------------------------------------------------------------
+------------------------------------------
+---------------------1--------------------
+--mikg_art_no
+select art_name, art_name_tl, mikg_art_no from chnccp_dwh.dw_art_var_tu
+where mikg_art_no in (225289, 232399, 118457, 225558, 209535,231680,233084,233012);
 
+select count(distinct home_store_id||cust_no||auth_person_id) as buyer, count(distinct home_store_id||cust_no||auth_person_id) as orders, sum(qty) as qty, sum(qty* price) as sales from chnccp_crm.evolve_flash_sale 
+where qty <> 0 and order_status = 1;
 
-select count(*) from chnccp_msi_z.ganyu_temp_namelist;
+select deliver_type, count(distinct home_store_id||cust_no||auth_person_id) as buyer, count(distinct home_store_id||cust_no||auth_person_id) as orders, sum(qty) as qty, sum(qty* price) as sales from chnccp_crm.evolve_flash_sale 
+where qty <> 0 and order_status = 1
+group by deliver_type;
 
--------------------------------------------------------
----------------------life cycle------------------------
--------------------以4.28为活动日期----------------------
---new
-drop table chnccp_msi_z.ganyu_temp_lifecycle_new;
-create table chnccp_msi_z.ganyu_temp_lifecycle_new
-	as(select a.delivery, a.store_no, a.cust_no, a.auth_person_id, 'new' as lifecycle
-		from chnccp_msi_z.ganyu_temp_namelist a 
-		join chnccp_dwh.dw_cust_invoice b 
-		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-		group by a.delivery, a.store_no, a.cust_no, a.auth_person_id
-		having min(b.date_of_day)>='2020-04-28'	)with data;
-
-select delivery, lifecycle, count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_new
-group by delivery,lifecycle;
-
---activation and reactivation
-drop table chnccp_msi_z.ganyu_temp_lifecycle_activation;
-create table chnccp_msi_z.ganyu_temp_lifecycle_activation
-	as(select t1.delivery, t1.store_no, t1.cust_no, t1.auth_person_id, 
-		CASE WHEN max(b.date_of_day)between '2020-01-29' and '2020-04-27' THEN 'Regualr'
-		     ELSE 'reactivation' END AS lifecycle
-		from (select a.* from chnccp_msi_z.ganyu_temp_namelist a left join chnccp_msi_z.ganyu_temp_lifecycle_new b on b.auth_person_id = a.auth_person_id and b.cust_no = a.cust_no and b.store_no = a.store_no where b.cust_no is NULL) t1
-		left join chnccp_dwh.dw_cust_invoice b 
-		on t1.store_no = b.home_store_id and t1.cust_no = b.cust_no and t1.auth_person_id = b.auth_person_id
-		where b.date_of_day <='2020-04-27'
-		group by t1.delivery, t1.store_no, t1.cust_no, t1.auth_person_id
+--cross basket
+drop table chnccp_msi_z.pickup_namelist;
+create table chnccp_msi_z.pickup_namelist
+	as(select home_store_id, cust_no, auth_person_id from chnccp_crm.evolve_flash_sale
+		where qty <> 0 and order_status = 1 and deliver_type = 2
+		group by home_store_id, cust_no, auth_person_id
 		)with data;
 
-select delivery, lifecycle, count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_activation
-group by 1,2;
-select lifecycle, count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_activation
-group by 1;
---total 
-select count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_new;
-select lifecycle, count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_activation
-group by lifecycle;
+select a.home_store_id, a.cust_no, a.auth_person_id, b.date_of_day, b.sell_qty_colli, b.sell_val_gsp, c.art_name, c.mikg_art_no from chnccp_msi_z.pickup_namelist a 
+join chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  b 
+on a.cust_no = b.cust_no and a.home_store_id = b.home_store_id and a.auth_person_id = b.auth_person_id
+join chnccp_dwh.dw_art_var_tu c 
+on c.art_no = b.art_no and c.var_tu_key = b.var_tu_key
+where b.date_of_day between '2020-05-16' and '2020-05-17'
+and c.mikg_art_no not in (225289,232399,118457,225558,209535,209535);
 
---basket
-select a.delivery, sum(b.sell_val_gsp)/count(a.auth_person_id||a.store_no||a.cust_no) as basket from chnccp_msi_z.ganyu_temp_namelist a 
-join chnccp_dwh.dw_cust_invoice b 
-on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-where b.date_of_day between '2019-10-29' and '2020-04-27'
-group by a.delivery;
+--qty for picking and delivery
+--610
+select b.mikg_art_no,b.art_name,b.art_name_tl
+,sum(a.sell_qty_colli) qty
+,sum(sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(sell_val_nsp) as net_sales
+from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  a
+inner join chnccp_dwh.dw_art_var_tu b
+	on a.art_no = b.art_no and a.var_tu_key = b.var_tu_Key
+where a.date_of_day between '2020-05-12' and  '2020-05-19'  --对应发货的时间
+and b.mikg_art_no = 233012 --大仓610发货的商品
+and a.store_id = 610
+and a.deli_ind = 'Y'
+group by 1,2,3
+order by 1;
 
-select sum(b.sell_val_gsp)/count(a.auth_person_id||a.store_no||a.cust_no) as basket from chnccp_msi_z.ganyu_temp_namelist a 
-join chnccp_dwh.dw_cust_invoice b 
-on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-where b.date_of_day between '2019-10-29' and '2020-04-27';
+--10
+select c.mikg_art_no,c.art_name,c.art_name_tl
+,sum(a.sell_qty_colli) qty
+,sum(a.sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(a.sell_val_nsp) as net_sales
+ from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  a
+ inner join (
+	-- order 
+	select a.invoice_id,a.home_store_id,a.cust_no,a.auth_person_id
+	,sum(sell_val_gsp) as gross_sales
+	,sum(sell_val_nsp) as net_sales
+	from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  a
+	where a.date_of_day between '2020-05-12' and  '2020-05-19'  --对应发货的时间
+	and a.art_no = 213223 --负商品编号
+	and a.store_id = 10
+	and a.deli_ind = 'Y'
+	group by 1,2,3,4
+) b
+on a.invoice_id = b.invoice_id 
+inner join chnccp_dwh.dw_art_var_tu c
+	on a.art_no =c.art_no and a.var_tu_key = c.var_tu_Key
+where  c.mikg_art_no in (231680, 233084) --门店发货的商品编号
+group by 1,2,3
+order by 1
 
---------------------------------------------------------
------------------------cust profile---------------------
------------------------age and gender-------------------
+--pick-up
+--else then KIWI
+SELECT b.mikg_art_no, b.art_name, b.art_name_tl
+,sum(a.sell_qty_colli) as qty
+,sum(a.sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(a.sell_val_nsp) as net_sales
+FROM chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no IN (225289, 232399, 118457, 209535) --自提的商品编号
+	AND
+a.cupr_action_id * 1000 + a.cupr_action_sequence_id IN (205035366, 205035367, 205035368, 205035490, 205035491)
+GROUP BY 1,2,3
+order by 1;
+
+--for KIWI
+SELECT b.mikg_art_no, b.art_name, b.art_name_tl
+,sum(a.sell_qty_colli) as qty
+,sum(a.sell_val_gsp) as gross_sales
+,count(distinct a.invoice_id) as orders
+,count(distinct a.home_store_id || a.cust_no|| a.auth_person_id)  as buyer
+,sum(a.sell_val_nsp) as net_sales
+FROM chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no = 225558 --自提的商品编号
+	AND a.cupr_action_id * 1000 + a.cupr_action_sequence_id = 205035486
+	and a.store_id in (10,12,17,44,50,139,173,198,229,11,40,41,54,60,62,66,76,105,67,179,14,38,55,68,72,164,130,141,127,163,13,42,74,125,70,142)
+GROUP BY 1,2,3
+order by 1;
+
+
+--fullfilment pick-up customer: 12157
+select count(distinct t1.auth_person_id||t1.home_store_id||t1.auth_person_id) from
+((select a.cust_no, a.home_store_id, a.auth_person_id from chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no = 225558 --自提的商品编号
+	AND a.cupr_action_id * 1000 + a.cupr_action_sequence_id = 205035486
+	and a.store_id in (10,12,17,44,50,139,173,198,229,11,40,41,54,60,62,66,76,105,67,179,14,38,55,68,72,164,130,141,127,163,13,42,74,125,70,142)
+ ) Union 
+(select a.cust_no, a.home_store_id, a.auth_person_id 
+	FROM chnccp_fls.view_frank_auth_person_invoice_line a
+INNER JOIN chnccp_dwh.dw_art_var_tu b
+	ON a.art_no =b.art_no 
+	AND a.var_tu_key = b.var_tu_Key
+WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+	AND b.mikg_art_no IN (225289, 232399, 118457, 209535) --自提的商品编号
+	AND
+a.cupr_action_id * 1000 + a.cupr_action_sequence_id IN (205035366, 205035367, 205035368, 205035490, 205035491)
+)) t1;
+
+
+
+-------------------------------------------
+--------------------2----------------------
+--take the example of one group of products
+select count(distinct store_key||cust_key||ch_key) as buyer, count(store_key||cust_key||ch_key) as orders, sum(counts) as qty, sum(counts* price) as sales from chnccp_msi_z.falshsales0513
+where counts<> 0 and order_status = 1 and goods_name in('确美同水宝宝纯净防晒乳237ml','美旅22寸万向轮哑光银拉杆箱','小米休闲运动双肩包');
+
+--uv
+select count(distinct cust_no||home_store_id||auth_person_id) from chnccp_crm.evolve_flash_sale ;
+--buyer
+select count(distinct cust_no||home_store_id||auth_person_id) from chnccp_crm.evolve_flash_sale where order_status = 1 and qty <> 0;
+
+------------------------------------------
+--------------------3---------------------
+drop table chnccp_msi_z.profile_0513;
+create table chnccp_msi_z.profile_0513
+	as(select auth_person_id, home_store_id, cust_no, deliver_type from chnccp_crm.evolve_flash_sale
+		where qty <>0 and order_status = 1
+		group by auth_person_id, home_store_id, cust_no, deliver_type
+		)with data;
+
+------------------------------------------
+--age and gender
+--missing data here is marked as unknown
 drop table chnccp_msi_z.ganyu_temp_ageandgender;
 create table chnccp_msi_z.ganyu_temp_ageandgender
-	as( select a.store_no, a.auth_person_id, a.cust_no, a.delivery,
+	as( select a.home_store_id, a.auth_person_id, a.cust_no, a.deliver_type,
 		CASE WHEN REGEXP_SIMILAR(left (right(b.identification_id,2),1), '[0-9]{1}','c')  = 1 then left (right(b.identification_id,2),1) 
 		ELSE NULL end as gender,
 		case when REGEXP_SIMILAR(right (left(b.identification_id,10),4), '[0-9]{4}','c')  = 1 then 2020-right (left(b.identification_id,10),4) 
 		ELSE NULL end as age
-		from chnccp_msi_z.ganyu_temp_namelist a 
+		from chnccp_msi_z.profile_0513 a 
 		left join chnccp_dwh.dw_cust_auth_person b 
-		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id)with data;
+		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id)with data;
 
---------------------------------------------------------
------------null identification_id check-----------------
-----------------------supplyment------------------------
-drop table chnccp_msi_z.ganyu_temp_ageandgender_null;
-create table chnccp_msi_z.ganyu_temp_ageandgender_null
-	as(
-select a.home_store_id, a.auth_person_id, a.cust_no, a.identification_id, e.cust_assort_section_id, d2.branch_id,
-case    
-    when e.cust_assort_section_id = 1 then '1) HoReCa'
-    when e.cust_assort_section_id = 3 then '1) Trader'
-    when e.cust_assort_section_id in (5,7) and d2.branch_id in (982) then '3) SCO - daypass'
-    when e.cust_assort_section_id in (5,7) and d2.branch_id in (401,492,488,971,972) then '3) SCO - FoM'
-    when e.cust_assort_section_id in (5,7) and d2.branch_id not in (401,492,493,488,971,972,973,982) then '3) SCO - w/o FoM'
-    else '4) Undefined'
-end as hts_info
- from (select * from chnccp_msi_z.ganyu_temp_ageandgender where (age is NULL or gender is null) ) b 
-left join chnccp_dwh.dw_cust_auth_person a 
-on a.home_store_id = b.store_no and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-left join chnccp_dwh.dw_customer d2
-on a.cust_no = d2.cust_no and a.home_store_id = d2.home_store_id
-left join chnccp_dwh.dw_cust_branch e 
-on e.branch_id = d2.branch_id) with data;
-
-
-drop table chnccp_msi_z.ganyu_temp_ageandgender_null_1;
-create table chnccp_msi_z.ganyu_temp_ageandgender_null_1 as (
-	select a.home_store_id, a.auth_person_id, a.cust_no, a.identification_id, a.branch_id, b.date_created, EXTRACT(year FROM b.date_created) as year1 from chnccp_msi_z.ganyu_temp_ageandgender_null a
-	left join chnccp_dwh.dw_cust_auth_person b 
-	on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id) with data;
-
-select year1, count(year1) from chnccp_msi_z.ganyu_temp_ageandgender_null_1
-group by year1
-order by year1;
-
-select hts_info, branch_id, count(*) from chnccp_msi_z.ganyu_temp_ageandgender_null
-group by hts_info, branch_id
-order by hts_info, branch_id;
-
-------------------------------------------------------
-
-------------------------------------------------------
---------------------------age-------------------------
+------------------------------------------
+--age 
+--missing data here is marked as unknown
 drop table chnccp_msi_z.ganyu_temp_age;
 create table chnccp_msi_z.ganyu_temp_age
-	as( select delivery, auth_person_id, store_no, cust_no, 
+	as( select deliver_type, home_store_id, auth_person_id, cust_no,
 		CASE WHEN age < 18 THEN '<18'
 		     WHEN age between 18 and 24 THEN '18-24'
 		     WHEN age between 25 and 29 THEN '25-29'
@@ -142,147 +232,144 @@ create table chnccp_msi_z.ganyu_temp_age
 		     WHEN age >= 50 THEN '>=50'
 		     ELSE NULL END AS age_group from chnccp_msi_z.ganyu_temp_ageandgender )with data;
 
-select delivery, age_group, count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_age
+select deliver_type, age_group, count(distinct home_store_id||auth_person_id||cust_no) from chnccp_msi_z.ganyu_temp_age
 group by 1,2
 order by 1,2;
 
-select age_group,count(distinct auth_person_id||store_no||cust_no) as total from chnccp_msi_z.ganyu_temp_age
+select age_group,count(distinct home_store_id||auth_person_id||cust_no) as total from chnccp_msi_z.ganyu_temp_age
 group by 1
 order by 1;
 
-select count(distinct auth_person_id||store_no||cust_no) from chnccp_msi_z.ganyu_temp_age where age_group is NULL;
-
-select delivery, auth_person_id, store_no, cust_no,  age  from chnccp_msi_z.ganyu_temp_ageandgender where age is not null;
-
---median age：年龄选择中位数而不是平均数
---delivery
-select delivery, avg(age) as avgage from chnccp_msi_z.ganyu_temp_ageandgender
-where age between 0 and 100
-group by delivery;
---total
-select avg(age) as avgage from chnccp_msi_z.ganyu_temp_ageandgender
-where age between 0 and 100;
---------
-
-select avg
---------------------------gender-------------------------
+-----------------------------------------
+--gender
 drop table chnccp_msi_z.ganyu_temp_gender;
 create table chnccp_msi_z.ganyu_temp_gender
-	as( select delivery, auth_person_id, store_no, cust_no, 
+	as( select deliver_type, home_store_id, auth_person_id, cust_no,
 		CASE WHEN gender in (0,2,4,6,8) THEN '女'
 		     WHEN gender in (1,3,5,7,9) THEN '男'
 		     ELSE '未知' END AS gender_group from chnccp_msi_z.ganyu_temp_ageandgender )with data;
 
-select delivery, gender_group, count(distinct auth_person_id||store_no||cust_no) as buyer from chnccp_msi_z.ganyu_temp_gender
+select deliver_type, gender_group, count(distinct home_store_id||auth_person_id||cust_no) as buyer from chnccp_msi_z.ganyu_temp_gender
 group by 1,2
 order by 1,2;
-select gender_group, count(distinct auth_person_id||store_no||cust_no) as buyer from chnccp_msi_z.ganyu_temp_gender
+select gender_group, count(distinct home_store_id||auth_person_id||cust_no) as buyer from chnccp_msi_z.ganyu_temp_gender
 group by 1;
------------------------UMC+------------------------------
-select a.delivery, b.member_type, count(distinct a.auth_person_id||a.store_no||a.cust_no) as buyer from chnccp_msi_z.ganyu_temp_namelist a 
+
+----------------------------------------
+--UMC+
+select a.deliver_type, b.member_type, count(distinct a.auth_person_id||a.home_store_id||a.cust_no) as buyer from chnccp_msi_z.profile_0513 a 
 left join chnccp_msi_z.mem_ref_umc_tag_act b 
-on a.auth_person_id = b.auth_person_id and a.store_no = b.home_store_id and a.cust_no = b.cust_no
-group by 1,2;
-select a.member_type,count(distinct a.auth_person_id||a.store_no||a.cust_no) as buyer from  chnccp_msi_z.ganyu_temp_namelist a 
+on a.auth_person_id = b.auth_person_id and a.home_store_id = b.home_store_id and a.cust_no = b.cust_no
+group by 1,2
+order by 1,2;
+select b.member_type, count(distinct a.auth_person_id||a.home_store_id||a.cust_no) as buyer from chnccp_msi_z.profile_0513 a 
 left join chnccp_msi_z.mem_ref_umc_tag_act b
-on a.auth_person_id = b.auth_person_id and a.store_no = b.home_store_id and a.cust_no = b.cust_no
+on a.auth_person_id = b.auth_person_id and a.home_store_id = b.home_store_id and a.cust_no = b.cust_no
 group by 1;
-------------------------fan------------------------------
-select a.delivery, b.fan_ind, count(distinct a.auth_person_id||a.store_no||a.cust_no) as buyer from chnccp_msi_z.ganyu_temp_namelist a 
+
+-----------------------------------------
+--fan
+select a.deliver_type, b.fan_ind, count(distinct a.auth_person_id||a.home_store_id||a.cust_no) as buyer from chnccp_msi_z.profile_0513 a 
 left join chnccp_msi_z.mem_ref_umc_tag_act b 
-on a.auth_person_id = b.auth_person_id and a.store_no = b.home_store_id and a.cust_no = b.cust_no
-group by 1,2;
-select b.fan_ind,count(distinct a.auth_person_id||a.store_no||a.cust_no) as buyer from  chnccp_msi_z.ganyu_temp_namelist a 
+on a.auth_person_id = b.auth_person_id and a.home_store_id = b.home_store_id and a.cust_no = b.cust_no
+group by 1,2
+order by 1,2;
+select b.fan_ind,count(distinct a.auth_person_id||a.home_store_id||a.cust_no) as buyer from chnccp_msi_z.profile_0513 a 
 left join chnccp_msi_z.mem_ref_umc_tag_act b
-on a.auth_person_id = b.auth_person_id and a.store_no = b.home_store_id and a.cust_no = b.cust_no
+on a.auth_person_id = b.auth_person_id and a.home_store_id = b.home_store_id and a.cust_no = b.cust_no
 group by 1;
 
------------------------------------------------------------
-------------------------liveshow---------------------------
---直播的名单
-chnccp_msi_z.liveshow_newuser 
-storekey
-custkey
-cardholderkey
---订单明细
-chnccp_msi_z.ganyu_temp
-dt
-campaign_type
-channel
-store_no
-cust_no
-auth_person_id
-order_type
-art_name
-qty
-price
-channel_name
-channel_category
-order_status
-liveshow
+-----------------------------------------
+--lifecycle
+--以5.12为活动日期--
+--new
+drop table chnccp_msi_z.ganyu_temp_lifecycle_new;
+create table chnccp_msi_z.ganyu_temp_lifecycle_new
+	as(select a.deliver_type, a.home_store_id , a.cust_no, a.auth_person_id, 'new' as lifecycle
+		from chnccp_msi_z.profile_0513 a 
+		join chnccp_dwh.dw_cust_invoice b 
+		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		group by a.deliver_type, a.home_store_id , a.cust_no, a.auth_person_id
+		having min(b.date_of_day)>='2020-05-12'	)with data;
 
-drop table chnccp_msi_z.liveshow_newuser_watched; --5390
-create table chnccp_msi_z.liveshow_newuser_watched
-	as(select a.storekey as home_store_id, a.custkey as cust_no, a.cardholderkey as auth_person_id from (select distinct storekey, custkey, cardholderkey from chnccp_msi_z.liveshow_newuser where storekey <> 0) a 
-		join (select distinct store_no, cust_no, auth_person_id from chnccp_msi_z.ganyu_temp) b 
-		on a.storekey = b.store_no and a.custkey = b.cust_no and a.cardholderkey = b.auth_person_id
+select deliver_type, lifecycle, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_new
+group by deliver_type,lifecycle;
+
+--activation and reactivation
+drop table chnccp_msi_z.ganyu_temp_lifecycle_activation;
+create table chnccp_msi_z.ganyu_temp_lifecycle_activation
+	as(select t1.deliver_type, t1.home_store_id , t1.cust_no, t1.auth_person_id,
+		CASE WHEN max(b.date_of_day)between '2020-02-13' and '2020-05-11' THEN 'Regualr'
+		     ELSE 'reactivation' END AS lifecycle
+		from (select a.* from chnccp_msi_z.profile_0513 a left join chnccp_msi_z.ganyu_temp_lifecycle_new b on b.auth_person_id = a.auth_person_id and b.cust_no = a.cust_no and b.home_store_id = a.home_store_id where b.cust_no is NULL) t1
+		left join chnccp_dwh.dw_cust_invoice b 
+		on t1.home_store_id = b.home_store_id and t1.cust_no = b.cust_no and t1.auth_person_id = b.auth_person_id
+		where b.date_of_day <='2020-05-11'
+		group by t1.deliver_type, t1.home_store_id, t1.cust_no, t1.auth_person_id
 		)with data;
 
-drop table chnccp_msi_z.liveshow_newuser_watched_not; --138944
-create table chnccp_msi_z.liveshow_newuser_watched_not 
-	as(select distinct b.store_no, b.cust_no, b.auth_person_id from (select distinct store_no, cust_no, auth_person_id from chnccp_msi_z.ganyu_temp) b
-		left join chnccp_msi_z.liveshow_newuser_watched a
-		on a.home_store_id = b.store_no and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-		where a.cust_no is NULL) with data;
+
+select deliver_type, lifecycle, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_activation
+group by 1,2;
+select lifecycle, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_activation
+group by 1;
+
+--total 
+select count(distinct auth_person_id||home_store_id||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_new;
+select lifecycle, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_msi_z.ganyu_temp_lifecycle_activation
+group by lifecycle;
+
+-----------------------------------------
+---------------------4-------------------
+drop table chnccp_msi_z.channel_0513;
+create table chnccp_msi_z.channel_0513
+	as(select home_store_id, cust_no, auth_person_id,channel_ts, order_ts,
+		CASE WHEN channel in ('20051301A01WPY000', '20051312A01WPY000') THEN 'Posting'
+		     WHEN channel in ('20051303A01MPY000', '20051304A01MPY000') THEN 'Pop-up'
+		     WHEN channel in ('20051314A01LSY000', '20051315A01LSY000') THEN 'Liveshow'
+		     WHEN channel = '20042901A05MCY000' THEN 'Share'
+		     ELSE 'Other' END AS tag, art_name, qty, price, order_status, liveshow, deliver_type from chnccp_crm.evolve_flash_sale 
+		where campaign_type = '5.13')with data;
+
+select tag, count(distinct auth_person_id||home_store_id||cust_no),sum(qty) as qty, sum(qty*price) as sales from chnccp_msi_z.channel_0513
+where order_status = 1 and qty <>0
+group by tag;
+
+select tag, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_msi_z.channel_0513
+group by tag;
+
+----------------------------------------
+-------------------5--------------------
+--sales
+select liveshow, count(distinct auth_person_id||home_store_id||cust_no) as buyer, count(auth_person_id||home_store_id||cust_no) as orders, sum(qty) as qty, sum(qty*price) as sales from chnccp_crm.evolve_flash_sale
+where order_status = 1 and qty <>0
+group by 1;
+
+--uv
+select liveshow, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_crm.evolve_flash_sale
+group by 1;
+
+--------------------------------------
+------------channel check-------------
+create table userinfo_0513 
+	as(select storekey as home_store_id, custkey as cust_no, cardholderkey as auth_person_id, channel,
+		CASE WHEN channel in ('20051301A01WPY000', '20051312A01WPY000') THEN 'Posting'
+		     WHEN channel in ('20051303A01MPY000', '20051304A01MPY000') THEN 'Pop-up'
+		     WHEN channel in ('20051314A01LSY000', '20051315A01LSY000') THEN 'Liveshow'
+		     WHEN channel = '20042901A05MCY000' THEN 'Share'
+		     ELSE 'Other' END AS tag
+		     from first_channel_userinfo where campaign_type = '5.13');
+
+select tag, count(distinct home_store_id|cust_no|auth_person_id) from userinfo_0513
+group by tag;
 
 
-drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan;
-create table chnccp_msi_z.liveshow_newuser_watched_UMCfan
-	as(select a.*, 
-		CASE WHEN b.member_type IS NOT NULL THEN b.member_type
-		     ELSE 'other' END AS member_type, 
-		CASE WHEN b.fan_ind IS NOT NULL THEN b.fan_ind
-		     ELSE 'N' END AS fan_ind from chnccp_msi_z.liveshow_newuser_watched a 
-		left join chnccp_msi_z.mem_ref_umc_tag_act b
-		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-		)with data;
+------------------------------------------
+--select art_name, count(store_no||cust_no||auth_person_id) as orders, sum(qty) as quantity from chnccp_msi_z.ganyu_temp
+--where order_status = 1 and qty <> 0
+--group by art_name;
 
-select fan_ind, member_type, count(*) as people from chnccp_msi_z.liveshow_newuser_watched_UMCfan
-group by fan_ind, member_type;
-
-drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket;
-create table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
-	as( select a.member_type, a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
-        join chnccp_msi_z.liveshow_newuser_watched_UMCfan a 
-        on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-        where b.date_of_day between '2019-04-29' and '2020-04-28'
-        group by a.member_type, a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id)with data;
-
-select member_type, fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
-group by member_type, fan_ind;
-
---basket for 2 groups of liveshow and non
-drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan;
-create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
-	as(select a.*, 
-		CASE WHEN b.member_type IS NOT NULL THEN b.member_type
-		     ELSE 'other' END AS member_type, 
-		CASE WHEN b.fan_ind IS NOT NULL THEN b.fan_ind
-		     ELSE 'N' END AS fan_ind from chnccp_msi_z.liveshow_newuser_watched_not a 
-		left join chnccp_msi_z.mem_ref_umc_tag_act b
-		on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-		)with data;
-
-select fan_ind, member_type, count(*) as people from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
-group by fan_ind, member_type;
-
-drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket;
-create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
-	as( select a.member_type, a.fan_ind, a.store_no, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
-        join chnccp_msi_z.liveshow_newuser_watched_not_UMCfan a 
-        on a.store_no = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
-        where b.date_of_day between '2019-04-29' and '2020-04-28'
-        group by a.member_type, a.fan_ind, a.store_no, a.cust_no, a.auth_person_id)with data;
-
-select member_type, fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
-group by member_type, fan_ind;
+-----------------left over----------------
+------------------------------------------
+select gcn_np, count(auth_person_id||home_store_id||cust_no) as people from chnccp_dwh.dw_gcn_campaign_event
+where gcn_no in(6947890911839,6947890911846,6947890911853,6947890912034,6947890912096,6947890912102) and gcn_disposition = 'redeemed';
