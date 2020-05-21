@@ -69,12 +69,21 @@ create table chnccp_msi_z.pickup_namelist
 		group by home_store_id, cust_no, auth_person_id
 		)with data;
 
-select a.home_store_id, a.cust_no, a.auth_person_id, b.date_of_day, b.sell_qty_colli, b.sell_val_gsp, c.art_name, c.mikg_art_no from chnccp_msi_z.pickup_namelist a 
+/*select a.home_store_id, a.cust_no, a.auth_person_id, b.date_of_day, b.sell_qty_colli, b.sell_val_gsp, c.art_name, c.mikg_art_no from chnccp_msi_z.pickup_namelist a 
 join chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  b 
 on a.cust_no = b.cust_no and a.home_store_id = b.home_store_id and a.auth_person_id = b.auth_person_id
 join chnccp_dwh.dw_art_var_tu c 
 on c.art_no = b.art_no and c.var_tu_key = b.var_tu_key
-where b.date_of_day between '2020-05-16' and '2020-05-17'
+where b.date_of_day between '2020-05-16' and '2020-05-19'
+and c.mikg_art_no not in (225289,232399,118457,225558,209535,209535); --闪购的商品除外*/
+
+
+select sum(b.sell_val_gsp) as sales from chnccp_msi_z.pickup_namelist a 
+join chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  b 
+on a.cust_no = b.cust_no and a.home_store_id = b.home_store_id and a.auth_person_id = b.auth_person_id
+join chnccp_dwh.dw_art_var_tu c 
+on c.art_no = b.art_no and c.var_tu_key = b.var_tu_key
+where b.date_of_day between '2020-05-16' and '2020-05-19'
 and c.mikg_art_no not in (225289,232399,118457,225558,209535,209535);
 
 --qty for picking and delivery
@@ -134,7 +143,7 @@ FROM chnccp_fls.view_frank_auth_person_invoice_line a
 INNER JOIN chnccp_dwh.dw_art_var_tu b
 	ON a.art_no =b.art_no 
 	AND a.var_tu_key = b.var_tu_Key
-WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+WHERE a.date_of_day BETWEEN '2020-05-16' and  '2020-05-19' --对应发货的时间
 	AND b.mikg_art_no IN (225289, 232399, 118457, 209535) --自提的商品编号
 	AND
 a.cupr_action_id * 1000 + a.cupr_action_sequence_id IN (205035366, 205035367, 205035368, 205035490, 205035491)
@@ -152,7 +161,7 @@ FROM chnccp_fls.view_frank_auth_person_invoice_line a
 INNER JOIN chnccp_dwh.dw_art_var_tu b
 	ON a.art_no =b.art_no 
 	AND a.var_tu_key = b.var_tu_Key
-WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+WHERE a.date_of_day BETWEEN '2020-05-16' and  '2020-05-19' --对应发货的时间
 	AND b.mikg_art_no = 225558 --自提的商品编号
 	AND a.cupr_action_id * 1000 + a.cupr_action_sequence_id = 205035486
 	and a.store_id in (10,12,17,44,50,139,173,198,229,11,40,41,54,60,62,66,76,105,67,179,14,38,55,68,72,164,130,141,127,163,13,42,74,125,70,142)
@@ -166,7 +175,7 @@ select count(distinct t1.auth_person_id||t1.home_store_id||t1.auth_person_id) fr
 INNER JOIN chnccp_dwh.dw_art_var_tu b
 	ON a.art_no =b.art_no 
 	AND a.var_tu_key = b.var_tu_Key
-WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+WHERE a.date_of_day BETWEEN '2020-05-16' and  '2020-05-19' --对应发货的时间
 	AND b.mikg_art_no = 225558 --自提的商品编号
 	AND a.cupr_action_id * 1000 + a.cupr_action_sequence_id = 205035486
 	and a.store_id in (10,12,17,44,50,139,173,198,229,11,40,41,54,60,62,66,76,105,67,179,14,38,55,68,72,164,130,141,127,163,13,42,74,125,70,142)
@@ -176,7 +185,7 @@ WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时�
 INNER JOIN chnccp_dwh.dw_art_var_tu b
 	ON a.art_no =b.art_no 
 	AND a.var_tu_key = b.var_tu_Key
-WHERE a.date_of_day BETWEEN '2020-05-12' and  '2020-05-19' --对应发货的时间
+WHERE a.date_of_day BETWEEN '2020-05-16' and  '2020-05-19' --对应发货的时间
 	AND b.mikg_art_no IN (225289, 232399, 118457, 209535) --自提的商品编号
 	AND
 a.cupr_action_id * 1000 + a.cupr_action_sequence_id IN (205035366, 205035367, 205035368, 205035490, 205035491)
@@ -203,6 +212,16 @@ create table chnccp_msi_z.profile_0513
 		where qty <>0 and order_status = 1
 		group by auth_person_id, home_store_id, cust_no, deliver_type
 		)with data;
+
+drop table chnccp_msi_z.profile_0513;
+create table chnccp_msi_z.profile_0513
+	as(select ch_key as auth_person_id, store_key as home_store_id, cust_key as cust_no, 
+		CASE WHEN goods_name in ('确美同水宝宝纯净防晒乳237ml','美旅22寸万向轮哑光银拉杆箱','小米休闲运动双肩包') THEN 1
+		ELSE 2 END as deliver_type from chnccp_msi_z.falshsales0513
+		where counts <>0 and order_status = 1
+		group by ch_key, store_key, cust_key, deliver_type
+		)with data;
+
 
 ------------------------------------------
 --age and gender
@@ -348,6 +367,142 @@ group by 1;
 --uv
 select liveshow, count(distinct auth_person_id||home_store_id||cust_no) from chnccp_crm.evolve_flash_sale
 group by 1;
+
+--fan and non-fan for liveshow and non-liveshow
+drop table chnccp_msi_z.liveshow_namelist;
+create table chnccp_msi_z.liveshow_namelist
+	as(select a.liveshow, a.home_store_id, a.cust_no, a.auth_person_id,
+	    CASE WHEN b.fan_ind is not NULL THEN b.fan_ind
+	         ELSE 'N' END as fan_ind from chnccp_crm.evolve_flash_sale a
+		left join chnccp_msi_z.liveshow_newuser_watched_UMCfan b  
+		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		group by a.liveshow, a.home_store_id, a.cust_no, a.auth_person_id, fan_ind
+		)with data;
+
+select liveshow, fan_ind, count(distinct auth_person_id||home_store_id||cust_no) as people from chnccp_msi_z.liveshow_namelist
+group by liveshow, fan_ind;
+
+--from 2019-05-13 to 2020-05-12
+drop table chnccp_msi_z.liveshow_namelist_basket;
+create table chnccp_msi_z.liveshow_namelist_basket
+	as( select a.liveshow, a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
+        join chnccp_msi_z.liveshow_namelist a 
+        on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+        where b.date_of_day between '2019-05-13' and '2020-05-12'
+        --and wel_ind = 'N' and fsd_ind = 'N' and deli_ind = 'N' and bvs_ind = 'N' and pcr_ind = 'N'
+        group by a.liveshow, a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id)with data;
+
+select liveshow, fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_namelist_basket
+group by liveshow, fan_ind;
+
+
+------------research for fan and non-fan-----------
+--namelist for liveshow
+drop table chnccp_msi_z.liveshow_newuser_watched;
+create table chnccp_msi_z.liveshow_newuser_watched
+	as(select distinct auth_person_id, home_store_id, cust_no from chnccp_msi_z.liveshow_userinfo_all 
+		where campaign_id = '5.13')with data;
+
+--namelist for nonliveshow
+drop table chnccp_msi_z.liveshow_newuser_watched_not; 
+create table chnccp_msi_z.liveshow_newuser_watched_not
+	as(select distinct a.auth_person_id, a.home_store_id, a.cust_no from (select distinct store_key as home_store_id, cust_key as cust_no, ch_key as auth_person_id from chnccp_msi_z.falshsales0513) a 
+		left join (select distinct auth_person_id, home_store_id, cust_no from chnccp_msi_z.liveshow_userinfo_all 
+		where campaign_id = '5.13') t1
+		on a.home_store_id = t1.home_store_id and a.auth_person_id = t1.auth_person_id and a.cust_no = t1.cust_no
+		where t1.cust_no is NULL)with data;
+
+--liveshow basket
+--tag with fan and non-fan
+drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan;
+create table chnccp_msi_z.liveshow_newuser_watched_UMCfan
+	as(select a.*, 
+		CASE WHEN b.fan_ind IS NOT NULL THEN b.fan_ind
+		     ELSE 'N' END AS fan_ind from chnccp_msi_z.liveshow_newuser_watched a 
+		left join chnccp_msi_z.mem_ref_umc_tag_act b
+		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		)with data;
+
+--tag with basket
+drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket;
+create table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
+	as( select a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
+        join chnccp_msi_z.liveshow_newuser_watched_UMCfan a 
+        on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+        where b.date_of_day between '2019-05-13' and '2020-05-12'
+        group by a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id)with data;
+
+select  fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
+group by fan_ind;
+
+select sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket;
+
+--non-liveshow basket
+drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan;
+create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
+	as(select a.*, 
+		CASE WHEN b.fan_ind IS NOT NULL THEN b.fan_ind
+		     ELSE 'N' END AS fan_ind from chnccp_msi_z.liveshow_newuser_watched_not a 
+		left join chnccp_msi_z.mem_ref_umc_tag_act b
+		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+		)with data;
+
+drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket;
+create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
+	as( select a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
+        join chnccp_msi_z.liveshow_newuser_watched_not_UMCfan a 
+        on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
+        where b.date_of_day between '2019-05-13' and '2020-05-12'
+        group by a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id)with data;
+
+select  fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
+group by fan_ind;
+
+select sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket;
+
+select tt.fan_ind, sum(tt.sales)/sum(tt.visits) as basket, avg(tt.visits) as frequency from (
+	(select * from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket)
+	Union
+	(select * from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket)
+)tt 
+group by tt.fan_ind;
+
+
+--liveshow and fan/non-fan
+--uv
+drop table chnccp_msi_z.liveshow_newuser_watched_fanandlive;
+create table chnccp_msi_z.liveshow_newuser_watched_fanandlive
+	as(select a.home_store_id, a.cust_no, a.auth_person_id,
+		CASE WHEN b.fan_ind is NOT NULL THEN b.fan_ind
+		ELSE 'N' END as fan_ind from chnccp_msi_z.liveshow_userinfo_all a 
+		left join chnccp_msi_z.liveshow_newuser_watched_UMCfan b 
+		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = a.auth_person_id
+		where a.campaign_id = '5.13')with data;
+
+--sales
+select fan_ind, count(distinct auth_person_id||home_store_id||cust_no) as buyer, count(auth_person_id||home_store_id||cust_no) as orders, sum(counts*price) as sales, sum(counts) as qty from chnccp_msi_z.liveshow_newuser_watched_fanandlive a 
+join chnccp_msi_z.falshsales0513 b 
+on a.home_store_id = b.store_key and a.auth_person_id = b.ch_key and a.cust_no = b.cust_key
+where b.order_status = 1
+group by fan_ind;
+
+
+--nonliveshow and fan/non-fan
+--uv
+SELECT CASE WHEN b.fan_ind is not NULL THEN b.fan_ind ELSE 'N' END as fan_ind, 
+count(distinct t1.auth_person_id||t1.home_store_id||t1.cust_no) as uv from 
+(select a.home_store_id, a.cust_no, a.auth_person_id from chnccp_msi_z.first_channel_userinfo a left join chnccp_msi_z.liveshow_newuser_watched b
+on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id where b.cust_no is NULL and a.campaign_id = '5.13') t1
+left join chnccp_msi_z.mem_ref_umc_tag_act b 
+on b.home_store_id = t1.home_store_id and b.cust_no = t1.cust_no and b.auth_person_id = t1.auth_person_id
+group by fan_ind;
+
+--sales
+select fan_ind, count(distinct auth_person_id||home_store_id||cust_no) as buyer, count(auth_person_id||home_store_id||cust_no) as orders, sum(counts*price) as sales, sum(counts) as qty from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan a 
+join chnccp_msi_z.falshsales0513 b 
+on a.home_store_id = b.store_key and a.auth_person_id = b.ch_key and a.cust_no = b.cust_key
+where b.order_status = 1
+
 
 --------------------------------------
 ------------channel check-------------
