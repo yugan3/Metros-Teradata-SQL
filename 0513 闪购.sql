@@ -86,6 +86,15 @@ on c.art_no = b.art_no and c.var_tu_key = b.var_tu_key
 where b.date_of_day between '2020-05-16' and '2020-05-19'
 and c.mikg_art_no not in (225289,232399,118457,225558,209535,209535);
 
+--前台毛利：所有自提订单用户的(nsp-nnbp)/nsp
+select sum(b.sell_val_nsp) as nsp, sum(b.sell_val_nnbp) as nnbp from chnccp_msi_z.pickup_namelist a 
+join chnccp_fls.view_frank_auth_person_invoice_line_channel_adj  b 
+on a.cust_no = b.cust_no and a.home_store_id = b.home_store_id and a.auth_person_id = b.auth_person_id
+join chnccp_dwh.dw_art_var_tu c 
+on c.art_no = b.art_no and c.var_tu_key = b.var_tu_key
+where b.date_of_day between '2020-05-16' and '2020-05-19';
+
+
 --qty for picking and delivery
 --610
 select b.mikg_art_no,b.art_name,b.art_name_tl
@@ -396,24 +405,42 @@ select liveshow, fan_ind, sum(sales)/sum(visits) as basket, avg(visits) as frequ
 group by liveshow, fan_ind;
 
 
-------------research for fan and non-fan-----------
+
+--------------------------------------------------
+--------liveshow and nonliveshow comparison-------
+--问题：研究观看直播和非直播人群的差异以及对销售的影响
+--方法：直接比较直播和非直播的人群
+--猜测：基于0429的观看直播的人群，将观看与未观看的人群分为2类共6组，即UMC+的3组合fan的2组，结果发现fan和non-fan的差距较为明显
+--目标：猜测fan和non-fan是一个很好的用来吸引直播和闪购的人群
+--发现：无论在直播和非直播两组中，fan(30）和non-fan（3）的frequency差别较大，所以继续研究
+--问题：但是由于幸存者偏差，例如：本来喜欢看直播的人就有可能是fan，所以需要反向验证是不是fan的人群在直播和非直播的人群中分布相同
+--改进：改变分组的依据，反过来比较fan的直播以及非直播，和non-fan的直播以及非直播
+--结论：在fan和non-fan这两个组内，直播和非直播人群转化率差异较大，所以猜测不成立，无法用fan和non-fan来作为区分人群标准。直播和非直播的人群本身就有区别，且转化率也不同
+
+
+-------------------------------------------------
+-----research for fan and non-fan in liveshow-----
+-----------------------namelist-------------------
 --namelist for liveshow
+--只要看过直播的人，无论有无消费记录。因为消费记录在后面直接查询
 drop table chnccp_msi_z.liveshow_newuser_watched;
 create table chnccp_msi_z.liveshow_newuser_watched
 	as(select distinct auth_person_id, home_store_id, cust_no from chnccp_msi_z.liveshow_userinfo_all 
 		where campaign_id = '5.13')with data;
 
 --namelist for nonliveshow
+--没看过直播但有消费记录
 drop table chnccp_msi_z.liveshow_newuser_watched_not; 
 create table chnccp_msi_z.liveshow_newuser_watched_not
-	as(select distinct a.auth_person_id, a.home_store_id, a.cust_no from (select distinct store_key as home_store_id, cust_key as cust_no, ch_key as auth_person_id from chnccp_msi_z.falshsales0513) a 
+	as(select distinct a.auth_person_id, a.home_store_id, a.cust_no from (select distinct store_key as home_store_id, cust_key as cust_no, ch_key as auth_person_id from chnccp_msi_z.falshsales0513 where order_status = 1) a 
 		left join (select distinct auth_person_id, home_store_id, cust_no from chnccp_msi_z.liveshow_userinfo_all 
 		where campaign_id = '5.13') t1
 		on a.home_store_id = t1.home_store_id and a.auth_person_id = t1.auth_person_id and a.cust_no = t1.cust_no
 		where t1.cust_no is NULL)with data;
 
---liveshow basket
---tag with fan and non-fan
+----------tags for fan and non-fan---------------
+--liveshow with fan and non-fan tags
+--看过直播的人打赏fan和non-fan的标签
 drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan;
 create table chnccp_msi_z.liveshow_newuser_watched_UMCfan
 	as(select a.*, 
@@ -423,7 +450,7 @@ create table chnccp_msi_z.liveshow_newuser_watched_UMCfan
 		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
 		)with data;
 
---tag with basket
+--liveshow fan and non-fan cross bakset
 drop table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket;
 create table chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket
 	as( select a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
@@ -437,7 +464,7 @@ group by fan_ind;
 
 select sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket;
 
---non-liveshow basket
+--non-liveshow with fan and non-fan tags
 drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan;
 create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
 	as(select a.*, 
@@ -447,6 +474,7 @@ create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan
 		on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id
 		)with data;
 
+--non-liveshow fan and non-fan basket
 drop table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket;
 create table chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket
 	as( select a.fan_ind, a.home_store_id, a.cust_no, a.auth_person_id, sum(b.sell_val_gsp)as sales, count (distinct b.date_of_day) as visits from chnccp_fls.view_frank_auth_person_invoice_line_channel_adj b
@@ -460,6 +488,7 @@ group by fan_ind;
 
 select sum(sales)/sum(visits) as basket, avg(visits) as frequency from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan_basket;
 
+--fan and non-fan for liveshow and non-liveshow
 select tt.fan_ind, sum(tt.sales)/sum(tt.visits) as basket, avg(tt.visits) as frequency from (
 	(select * from chnccp_msi_z.liveshow_newuser_watched_UMCfan_basket)
 	Union
@@ -468,7 +497,7 @@ select tt.fan_ind, sum(tt.sales)/sum(tt.visits) as basket, avg(tt.visits) as fre
 group by tt.fan_ind;
 
 
---liveshow and fan/non-fan
+--from fan and non-fan to compare liveshow and non-liveshow
 --uv
 drop table chnccp_msi_z.liveshow_newuser_watched_fanandlive;
 create table chnccp_msi_z.liveshow_newuser_watched_fanandlive
@@ -492,39 +521,24 @@ group by fan_ind;
 SELECT CASE WHEN b.fan_ind is not NULL THEN b.fan_ind ELSE 'N' END as fan_ind, 
 count(distinct t1.auth_person_id||t1.home_store_id||t1.cust_no) as uv from 
 (select a.home_store_id, a.cust_no, a.auth_person_id from chnccp_msi_z.first_channel_userinfo a left join chnccp_msi_z.liveshow_newuser_watched b
+--所有浏览过的人 left join 所有看过直播秀的人
 on a.home_store_id = b.home_store_id and a.cust_no = b.cust_no and a.auth_person_id = b.auth_person_id where b.cust_no is NULL and a.campaign_id = '5.13') t1
 left join chnccp_msi_z.mem_ref_umc_tag_act b 
+--打上fan和non-fan的标签
 on b.home_store_id = t1.home_store_id and b.cust_no = t1.cust_no and b.auth_person_id = t1.auth_person_id
 group by fan_ind;
 
 --sales
-select fan_ind, count(distinct auth_person_id||home_store_id||cust_no) as buyer, count(auth_person_id||home_store_id||cust_no) as orders, sum(counts*price) as sales, sum(counts) as qty from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan a 
+select a.fan_ind, count(distinct auth_person_id||home_store_id||cust_no) as buyer, count(auth_person_id||home_store_id||cust_no) as orders, sum(counts*price) as sales, sum(counts) as qty from chnccp_msi_z.liveshow_newuser_watched_not_UMCfan a 
 join chnccp_msi_z.falshsales0513 b 
 on a.home_store_id = b.store_key and a.auth_person_id = b.ch_key and a.cust_no = b.cust_key
 where b.order_status = 1
-
-
---------------------------------------
-------------channel check-------------
-create table userinfo_0513 
-	as(select storekey as home_store_id, custkey as cust_no, cardholderkey as auth_person_id, channel,
-		CASE WHEN channel in ('20051301A01WPY000', '20051312A01WPY000') THEN 'Posting'
-		     WHEN channel in ('20051303A01MPY000', '20051304A01MPY000') THEN 'Pop-up'
-		     WHEN channel in ('20051314A01LSY000', '20051315A01LSY000') THEN 'Liveshow'
-		     WHEN channel = '20042901A05MCY000' THEN 'Share'
-		     ELSE 'Other' END AS tag
-		     from first_channel_userinfo where campaign_type = '5.13');
-
-select tag, count(distinct home_store_id|cust_no|auth_person_id) from userinfo_0513
-group by tag;
+group by a.fan_ind;
 
 
 ------------------------------------------
---select art_name, count(store_no||cust_no||auth_person_id) as orders, sum(qty) as quantity from chnccp_msi_z.ganyu_temp
---where order_status = 1 and qty <> 0
---group by art_name;
-
 -----------------left over----------------
-------------------------------------------
+--method1:在发票中查看dnr
+--method2:campaign-event的活动gcn
 select gcn_np, count(auth_person_id||home_store_id||cust_no) as people from chnccp_dwh.dw_gcn_campaign_event
 where gcn_no in(6947890911839,6947890911846,6947890911853,6947890912034,6947890912096,6947890912102) and gcn_disposition = 'redeemed';
